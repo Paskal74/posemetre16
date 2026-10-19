@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Posem&egrave;tre 16</title>
+  <meta name="description" content="Posem&egrave;tre pour la photo argentique : mesure la sc&egrave;ne avec l'appareil photo du t&eacute;l&eacute;phone, selon la focale, et recoupe avec la r&egrave;gle du Sunny 16.">
+  <meta name="theme-color" content="#1b1915">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=DM+Mono:wght@300;400;500&display=swap">
+<style>
+/* Layout: one-screen phone app styled like a camera body — scrolling panel of controls, a bottom tab bar, and an LED viewfinder readout as the hero of each tab. Deliberately single dark look (black chrome). */
+:root {
+  --body: #1b1915;        /* camera body, black chrome */
+  --plate: #25221d;       /* top-plate panels */
+  --plate-2: #2f2b25;     /* raised dial */
+  --rule: #3d372f;
+  --ink: #ece7dc;         /* engraved white markings */
+  --ink-soft: #a29b8d;
+  --accent: #d0754d;      /* oxide red, priority marks */
+  --led: #c9ecb9;         /* viewfinder LED green */
+  --led-bg: #0f0e0b;
+  --warn: #e0a640;
+  --bad: #e2664f;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+  --f-led: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--body); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; -webkit-tap-highlight-color: transparent; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: flex; flex-direction: column; }
+.top { padding-block: 10px 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--rule); }
+.brand { font-family: var(--f-display); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; font-size: 1.05rem; margin: 0; }
+.brand span { color: var(--accent); }
+.filmtag { font-family: var(--f-led); font-size: .78rem; color: var(--ink-soft); white-space: nowrap; }
+
+main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.view { padding-block: 14px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 34rem; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+.tabs { display: flex; border-top: 1px solid var(--rule); background: var(--plate); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.tabs button { flex: 1; background: none; border: 0; padding: 10px 4px 12px; font-family: var(--f-display); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; font-size: .82rem; color: var(--ink-soft); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.tabs button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs button[aria-selected="true"] svg { stroke: var(--accent); }
+
+/* LED readout */
+.led { background: var(--led-bg); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+.led-src { font-family: var(--f-display); font-size: .74rem; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); display: flex; justify-content: space-between; gap: 8px; }
+.led-src i { font-style: normal; color: var(--ink-soft); letter-spacing: .06em; text-transform: none; font-family: var(--f-led); font-size: .72rem; }
+.led-main { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.pair { font-family: var(--f-led); color: var(--led); font-size: clamp(2rem, 11vw, 2.7rem); font-weight: 400; line-height: 1; letter-spacing: -.02em; display: flex; gap: .45em; flex-wrap: wrap; font-variant-numeric: tabular-nums; text-shadow: 0 0 14px color-mix(in srgb, var(--led) 35%, transparent); }
+.pair small { font-size: .45em; opacity: .7; margin-left: .1em; }
+.ev { text-align: right; font-family: var(--f-display); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); white-space: nowrap; }
+.ev b { display: block; font-family: var(--f-led); font-weight: 400; font-size: 1.35rem; letter-spacing: 0; color: var(--led); }
+.flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--f-led); font-size: .72rem; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-soft); }
+.chip.ok { color: var(--led); border-color: color-mix(in srgb, var(--led) 35%, var(--rule)); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--rule)); }
+.chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--rule)); }
+.s16 { border-top: 1px dashed var(--rule); padding-top: 8px; font-size: .84rem; color: var(--ink-soft); }
+.s16 b { color: var(--ink); font-weight: 600; }
+
+/* Viewfinder */
+.finder { position: relative; border-radius: 10px; overflow: hidden; background: var(--plate); border: 1px solid var(--rule); aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center; }
+.finder canvas { width: 100%; height: 100%; display: block; touch-action: manipulation; }
+.finder .empty { padding: 20px; text-align: center; color: var(--ink-soft); font-size: .9rem; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.finder .empty svg { width: 44px; height: 44px; stroke: var(--accent); fill: none; stroke-width: 1.4; }
+.finder .hint { position: absolute; left: 8px; bottom: 8px; right: 8px; font-family: var(--f-led); font-size: .68rem; color: var(--ink); background: color-mix(in srgb, var(--led-bg) 75%, transparent); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+
+.shoot-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; border: 1px solid var(--rule); background: var(--plate-2); padding: 12px 14px; font-family: var(--f-display); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; font-size: .9rem; cursor: pointer; min-height: 48px; text-align: center; }
+.btn svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; flex: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1b1410; font-size: 1rem; }
+.btn.small { min-height: 36px; padding: 6px 12px; font-size: .78rem; }
+.btn:active { transform: translateY(1px); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.exif { font-family: var(--f-led); font-size: .74rem; color: var(--ink-soft); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.exif b { color: var(--ink); font-weight: 400; }
+.msg { font-size: .86rem; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--rule)); color: var(--warn); }
+
+/* Control panel */
+.panel { background: var(--plate); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { margin: 0; font-family: var(--f-display); font-size: .78rem; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); font-weight: 700; }
+.row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label, .lbl { font-family: var(--f-display); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+select, input[type="number"], input[type="text"] { width: 100%; background: var(--led-bg); color: var(--led); border: 1px solid var(--rule); border-radius: 7px; padding: 10px; font-family: var(--f-led); font-size: .95rem; -webkit-appearance: none; appearance: none; min-height: 44px; }
+input[type="text"] { color: var(--ink); font-family: var(--f-body); }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; background: var(--plate-2); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 11px; font-family: var(--f-led); font-size: .9rem; cursor: pointer; min-height: 40px; }
+.chips button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1b1410; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--plate-2); border: 0; border-right: 1px solid var(--rule); padding: 10px 4px; font-family: var(--f-display); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: .78rem; cursor: pointer; min-height: 44px; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #1b1410; }
+.range { display: flex; align-items: center; gap: 10px; }
+.range input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.range output { font-family: var(--f-led); color: var(--led); min-width: 4.2em; text-align: right; font-size: .9rem; }
+.help { font-size: .8rem; color: var(--ink-soft); margin: 0; }
+
+details.manual { border: 1px solid var(--rule); border-radius: 10px; background: var(--plate); }
+details.manual summary { padding: 12px; cursor: pointer; font-family: var(--f-display); letter-spacing: .12em; text-transform: uppercase; font-size: .8rem; color: var(--ink-soft); font-weight: 600; }
+details.manual .inner { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+/* Sunny 16 scenes */
+.lede { margin: 0; color: var(--ink-soft); font-size: .92rem; }
+.lede b { color: var(--ink); }
+.scenes { display: flex; flex-direction: column; gap: 6px; }
+.scene { display: grid; grid-template-columns: 3.2rem 1fr auto; gap: 10px; align-items: center; text-align: left; background: var(--plate); border: 1px solid var(--rule); border-radius: 9px; padding: 10px 12px; cursor: pointer; }
+.scene .f { font-family: var(--f-led); color: var(--led); font-size: 1rem; }
+.scene .t { display: flex; flex-direction: column; min-width: 0; }
+.scene .t b { font-weight: 600; }
+.scene .t span { font-size: .8rem; color: var(--ink-soft); }
+.scene .e { font-family: var(--f-led); font-size: .72rem; color: var(--ink-soft); }
+.scene[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--plate)); }
+
+/* Log */
+.log { display: flex; flex-direction: column; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.log li { background: var(--plate); border: 1px solid var(--rule); border-radius: 9px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+.log .res { font-family: var(--f-led); color: var(--led); font-size: 1.15rem; }
+.log .when { font-family: var(--f-led); font-size: .72rem; color: var(--ink-soft); text-align: right; }
+.log .meta { grid-column: 1 / -1; font-size: .8rem; color: var(--ink-soft); }
+.log .note { grid-column: 1 / -1; font-size: .86rem; }
+.empty-log { color: var(--ink-soft); font-size: .9rem; text-align: center; padding: 24px 10px; border: 1px dashed var(--rule); border-radius: 10px; }
+.toolbar { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--body); padding: 8px 14px; border-radius: 999px; font-size: .85rem; font-weight: 600; z-index: 5; }
+
+table.s { width: 100%; border-collapse: collapse; font-size: .84rem; }
+table.s th, table.s td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--rule); }
+table.s th { font-family: var(--f-display); letter-spacing: .1em; text-transform: uppercase; font-size: .7rem; color: var(--ink-soft); font-weight: 600; }
+table.s td:nth-child(2) { font-family: var(--f-led); color: var(--led); white-space: nowrap; }
+.tblwrap { overflow-x: auto; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="brand">Posemètre <span>16</span></h1>
+    <span class="filmtag" id="filmTag">ISO 100 · 50 mm</span>
+  </header>
+
+  <main id="main">
+    <!-- ========== POSEMÈTRE ========== -->
+    <section class="view" id="v-meter" role="tabpanel" aria-labelledby="t-meter">
+      <div class="led" id="ledMeter" aria-live="polite"></div>
+
+      <div class="finder" id="finder">
+        <div class="empty" id="finderEmpty">
+          <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.6"/><path d="M8 6l1.5-2h5L16 6"/></svg>
+          <span>Vise la scène avec le téléphone et prends une photo.<br>Le cadre rouge montrera le champ de ta focale.</span>
+        </div>
+        <canvas id="finderCv" hidden aria-label="Photo mesurée avec le cadre de la focale"></canvas>
+        <div class="hint" id="finderHint" hidden></div>
+      </div>
+
+      <div class="shoot-row">
+        <label class="btn primary" for="cam">
+          <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.6"/></svg>
+          Mesurer la scène
+        </label>
+        <label class="btn" for="gal" title="Importer une photo de la galerie">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg>
+          <span class="visually-hidden">Importer une photo</span>
+        </label>
+        <input class="visually-hidden" type="file" id="cam" accept="image/*" capture="environment">
+        <input class="visually-hidden" type="file" id="gal" accept="image/jpeg,image/*">
+      </div>
+      <div class="exif" id="exifLine" hidden></div>
+      <div class="msg" id="meterMsg" hidden></div>
+
+      <details class="manual" id="manualBox">
+        <summary>Saisie manuelle des réglages du téléphone</summary>
+        <div class="inner">
+          <p class="help">Si la photo ne contient pas les données d'exposition, ouvre le mode Pro de l'appareil photo du téléphone et recopie ce qu'il affiche.</p>
+          <div class="row3">
+            <div class="field"><label for="mIso">ISO</label><input type="number" id="mIso" inputmode="numeric" value="50" min="10"></div>
+            <div class="field"><label for="mT">Vitesse 1/x</label><input type="number" id="mT" inputmode="decimal" value="1000" min="0.01" step="any"></div>
+            <div class="field"><label for="mN">Ouverture f/</label><input type="number" id="mN" inputmode="decimal" value="1.8" min="0.9" step="0.1"></div>
+          </div>
+          <button class="btn small" id="mGo" type="button">Calculer l'IL</button>
+        </div>
+      </details>
+
+      <div class="panel">
+        <h2>Mesure</h2>
+        <div class="field">
+          <span class="lbl" id="lblMode">Mode de mesure</span>
+          <div class="seg" role="group" aria-labelledby="lblMode" id="segMeter">
+            <button type="button" data-v="avg">Moyenne</button>
+            <button type="button" data-v="cw" aria-pressed="true">Pondérée</button>
+            <button type="button" data-v="spot">Spot</button>
+          </div>
+          <p class="help" id="meterHelp">Pondérée centrale, comme la cellule d'un reflex : le centre du cadre compte davantage.</p>
+        </div>
+        <div class="field">
+          <label for="calib">Étalonnage du téléphone</label>
+          <div class="range"><input type="range" id="calib" min="-2" max="2" step="0.1" value="0"><output id="calibOut">0.0 IL</output></div>
+          <p class="help">À régler une fois en comparant avec une cellule de confiance ou avec le Sunny 16 par soleil franc.</p>
+        </div>
+      </div>
+
+      <button class="btn" id="saveBtn" type="button" hidden>
+        <svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>
+        Enregistrer le relevé
+      </button>
+    </section>
+
+    <!-- ========== SUNNY 16 ========== -->
+    <section class="view" id="v-sunny" role="tabpanel" aria-labelledby="t-sunny" hidden>
+      <p class="lede">Par <b>soleil franc</b>, à <b>f/16</b>, la vitesse est <b>l'inverse de la sensibilité</b> du film. Lis l'ombre portée du sujet pour choisir la lumière.</p>
+      <div class="led" id="ledSunny" aria-live="polite"></div>
+      <div class="scenes" id="scenes" role="group" aria-label="Condition de lumière"></div>
+      <div class="tblwrap">
+        <table class="s">
+          <thead><tr><th>Film</th><th>Soleil franc</th></tr></thead>
+          <tbody id="s16tbl"></tbody>
+        </table>
+      </div>
+      <p class="help">Valeurs pour un sujet de gris moyen. Contre-jour, sujet sombre ou neige demandent une correction (réglage « Correction » dans l'onglet Boîtier).</p>
+    </section>
+
+    <!-- ========== BOÎTIER ========== -->
+    <section class="view" id="v-body" role="tabpanel" aria-labelledby="t-body" hidden>
+      <div class="panel">
+        <h2>Film</h2>
+        <div class="field">
+          <label for="iso">Sensibilité ISO / ASA</label>
+          <select id="iso">
+            <option value="25">25 · Pan F+</option>
+            <option value="50">50 · Velvia 50</option>
+            <option value="100">100 · Ektar / FP4 / Fomapan</option>
+            <option value="125">125 · FP4+</option>
+            <option value="160">160 · Portra 160</option>
+            <option value="200">200 · Gold / Kentmere 200</option>
+            <option value="400">400 · Tri-X / HP5 / Portra 400</option>
+            <option value="800">800 · Portra 800 / HP5 poussé</option>
+            <option value="1600">1600 · Tri-X poussé 2 IL</option>
+            <option value="3200">3200 · Delta 3200</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="corr">Correction d'exposition</label>
+          <div class="range"><input type="range" id="corr" min="-3" max="3" step="0.5" value="0"><output id="corrOut">0 IL</output></div>
+          <p class="help">+1 pour un contre-jour ou de la neige, −1 pour un sujet très sombre à garder sombre.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Objectif</h2>
+        <div class="field">
+          <span class="lbl" id="lblFocal">Focale</span>
+          <div class="chips" id="focalChips" role="group" aria-labelledby="lblFocal"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="focal">Focale (mm)</label><input type="number" id="focal" inputmode="numeric" min="8" max="1000" value="50"></div>
+          <div class="field">
+            <label for="nmax">Ouverture max.</label>
+            <select id="nmax">
+              <option>1.2</option><option selected>1.4</option><option>1.7</option><option>1.8</option><option>2</option><option>2.8</option><option>3.5</option><option>4</option><option>5.6</option>
+            </select>
+          </div>
+        </div>
+        <p class="help" id="focalHelp"></p>
+      </div>
+
+      <div class="panel">
+        <h2>Priorité</h2>
+        <div class="seg" role="group" aria-label="Mode de priorité" id="segPrio">
+          <button type="button" data-v="auto" aria-pressed="true">Main levée</button>
+          <button type="button" data-v="A">Ouverture</button>
+          <button type="button" data-v="S">Vitesse</button>
+        </div>
+        <p class="help" id="prioHelp"></p>
+        <div class="field" id="apField" hidden>
+          <label for="apSel">Ouverture fixée</label>
+          <select id="apSel"></select>
+        </div>
+        <div class="field" id="spField" hidden>
+          <label for="spSel">Vitesse fixée</label>
+          <select id="spSel"></select>
+        </div>
+      </div>
+      <p class="help">Vitesses limitées à la plage d'un Pentax LX : 1/2000 s à 125 s. Réglages mémorisés sur ce téléphone.</p>
+    </section>
+
+    <!-- ========== RELEVÉS ========== -->
+    <section class="view" id="v-log" role="tabpanel" aria-labelledby="t-log" hidden>
+      <div class="toolbar">
+        <span class="lbl" id="logCount">0 relevé</span>
+        <button class="btn small" id="clearBtn" type="button" hidden>Tout effacer</button>
+      </div>
+      <ul class="log" id="logList"></ul>
+      <p class="help">Les relevés restent sur ce téléphone, dans ce navigateur.</p>
+    </section>
+  </main>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="t-meter" aria-controls="v-meter" aria-selected="true" data-view="v-meter">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 12l4-4M12 4v2M20 12h-2M4 12h2"/></svg>Mesure</button>
+    <button role="tab" id="t-sunny" aria-controls="v-sunny" aria-selected="false" data-view="v-sunny">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Sunny 16</button>
+    <button role="tab" id="t-body" aria-controls="v-body" aria-selected="false" data-view="v-body">
+      <svg viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="12" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M6 7V5h4v2"/></svg>Boîtier</button>
+    <button role="tab" id="t-log" aria-controls="v-log" aria-selected="false" data-view="v-log">
+      <svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>Relevés</button>
+  </nav>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- Scales ---------- */
+  var SPEEDS = [1/2000,1/1000,1/500,1/250,1/125,1/60,1/30,1/15,1/8,1/4,1/2,1,2,4,8,15,30,60,125];
+  var APS = [1.2,1.4,1.6,1.8,2,2.2,2.5,2.8,3.2,3.5,4,4.5,5,5.6,6.3,7.1,8,9,10,11,13,14,16,18,20,22];
+  var FULL_APS = [1.4,2,2.8,4,5.6,8,11,16,22];
+  var FOCALS = [20,24,28,35,50,85,105,135,200];
+  var SCENES = [
+    { ev: 16, name: "Neige / sable au soleil", shadow: "ombres très denses, tranchées" },
+    { ev: 15, name: "Soleil franc", shadow: "ombre nette, bords définis" },
+    { ev: 14, name: "Voile léger", shadow: "ombre aux contours flous" },
+    { ev: 13, name: "Couvert", shadow: "ombre à peine visible" },
+    { ev: 12, name: "Fort couvert", shadow: "aucune ombre" },
+    { ev: 11, name: "Ombre ouverte / soleil couchant", shadow: "sujet à l'ombre d'un mur" },
+    { ev: 9,  name: "Crépuscule", shadow: "ciel encore clair" },
+    { ev: 7,  name: "Intérieur très éclairé", shadow: "bureau, gymnase" },
+    { ev: 5,  name: "Intérieur le soir", shadow: "salon, lampes" },
+    { ev: 3,  name: "Rue de nuit éclairée", shadow: "vitrines, réverbères" }
+  ];
+  function sceneFor(ev) {
+    if (ev >= 15.5) return "Neige / sable au soleil";
+    if (ev >= 14.5) return "Soleil franc";
+    if (ev >= 13.5) return "Voile léger";
+    if (ev >= 12.5) return "Couvert";
+    if (ev >= 11.5) return "Fort couvert";
+    if (ev >= 10.5) return "Ombre ouverte";
+    if (ev >= 9.5)  return "Coucher de soleil";
+    if (ev >= 8)    return "Crépuscule";
+    if (ev >= 6)    return "Intérieur éclairé";
+    if (ev >= 4)    return "Intérieur le soir";
+    return "Nuit";
+  }
+
+  /* ---------- State ---------- */
+  var S = { iso: 100, focal: 50, nmax: 1.4, prio: "auto", ap: 8, sp: 1/250, corr: 0, calib: 0, meter: "cw", sunnyEv: 15 };
+  var KEY = "posemetre16.v1", LOGKEY = "posemetre16.log";
+  try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) for (var k in saved) if (k in S) S[k] = saved[k]; } catch (e) {}
+  function persist() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  var LOG = [];
+  try { LOG = JSON.parse(localStorage.getItem(LOGKEY) || "[]") || []; } catch (e) { LOG = []; }
+  function persistLog() { try { localStorage.setItem(LOGKEY, JSON.stringify(LOG)); } catch (e) {} }
+
+  // measurement
+  var M = { exif: null, base: null, lum: null, w: 0, h: 0, img: null, spot: { x: .5, y: .5 }, ev: null, clip: 0, phone35: 26 };
+
+  /* ---------- Formatting ---------- */
+  function fmtT(t) {
+    if (t >= 1) return (t >= 10 ? Math.round(t) : Math.round(t * 10) / 10) + " s";
+    return "1/" + Math.round(1 / t);
+  }
+  function fmtN(n) { return "f/" + (Math.round(n * 10) / 10).toString(); }
+  function fmtEv(e) { return (Math.round(e * 10) / 10).toFixed(1); }
+  function nearestLog(arr, v) {
+    var b = arr[0], d = Infinity;
+    for (var i = 0; i < arr.length; i++) { var dd = Math.abs(Math.log2(arr[i]) - Math.log2(v)); if (dd < d) { d = dd; b = arr[i]; } }
+    return b;
+  }
+
+  /* ---------- Exposure solver ----------
+     EV(ISO100) of the scene → EV for the film:  E = EV100 + log2(ISO/100) − correction
+     Exposure equation: N² / t = 2^E                                             */
+  function solve(ev100) {
+    var E = ev100 + Math.log2(S.iso / 100) - S.corr;
+    var L = Math.pow(2, E);
+    var aps = APS.filter(function (a) { return a >= S.nmax - 0.001; });
+    var minN = aps[0], maxN = 22;
+    var handT = 1 / S.focal;                       // règle du 1/focale
+    var flags = [];
+    var N, t;
+
+    if (S.prio === "A") {
+      N = Math.max(S.ap, minN);
+      t = nearestLog(SPEEDS, N * N / L);
+      if (N * N / L < 1/2000 / 1.4) flags.push(["bad", "trop de lumière : ferme le diaphragme"]);
+      if (N * N / L > 125 * 1.4) flags.push(["bad", "trop sombre : pose > 125 s"]);
+    } else if (S.prio === "S") {
+      t = S.sp;
+      var exact = Math.sqrt(t * L);
+      N = nearestLog(aps, Math.min(Math.max(exact, minN), maxN));
+      if (exact > maxN * 1.12) flags.push(["bad", "trop de lumière à cette vitesse"]);
+      if (exact < minN / 1.12) flags.push(["bad", "trop sombre : objectif à pleine ouverture"]);
+    } else {
+      // Main levée : vitesse la plus lente sûre (≤ 1/focale), puis on accélère tant que le diaphragme dépasse f/11
+      var i0 = 0;
+      for (var i = 0; i < SPEEDS.length; i++) if (SPEEDS[i] <= handT * 1.05) i0 = i;
+      var idx = i0;
+      while (idx > 0 && Math.sqrt(SPEEDS[idx] * L) > 11.5) idx--;
+      t = SPEEDS[idx];
+      var ex = Math.sqrt(t * L);
+      if (ex < minN) {
+        // pas assez de lumière : pleine ouverture, on ralentit
+        N = minN;
+        t = nearestLog(SPEEDS, N * N / L);
+        if (N * N / L > 125 * 1.4) flags.push(["bad", "trop sombre : pose > 125 s"]);
+      } else {
+        N = nearestLog(aps, Math.min(ex, maxN));
+        if (ex > maxN * 1.12) flags.push(["bad", "trop de lumière : film plus lent ou filtre ND"]);
+      }
+    }
+    var dev = Math.log2(N * N / t) - E; // >0 : sous-exposé
+    if (t > handT * 1.05 && t < 1) flags.push(["warn", "risque de bougé : trépied sous " + fmtT(nearestLog(SPEEDS, handT))]);
+    if (t >= 1) flags.push(["warn", "pose longue : corrige la réciprocité du film"]);
+    if (Math.abs(dev) >= 0.25 && !flags.some(function (f) { return f[0] === "bad"; }))
+      flags.push(["warn", (dev > 0 ? "sous-exposé de " : "surexposé de ") + Math.abs(Math.round(dev * 10) / 10) + " IL"]);
+    if (N <= 2.8) flags.push(["", "faible profondeur de champ"]);
+    else if (N >= 11) flags.push(["", "grande profondeur de champ"]);
+    if (!flags.some(function (f) { return f[0]; })) flags.unshift(["ok", "couple équilibré"]);
+
+    // Ce que dirait le Sunny 16 (f/16 décalé, vitesse ≈ 1/ISO)
+    var s16t = nearestLog(SPEEDS, 1 / S.iso);
+    var s16N = 16 * Math.pow(2, (ev100 - S.corr - 15) / 2) * Math.sqrt(s16t * S.iso);
+    return { N: N, t: t, E: E, flags: flags, s16: { N: nearestLog(FULL_APS.concat([32]), s16N), t: s16t } };
+  }
+
+  function renderLed(el, ev100, src, srcInfo) {
+    if (ev100 == null || !isFinite(ev100)) {
+      el.innerHTML = '<div class="led-src">' + src + '<i>' + (srcInfo || "") + '</i></div>' +
+        '<div class="led-main"><div class="pair">f/–<span>–</span></div><div class="ev">IL 100<b>–</b></div></div>' +
+        '<div class="s16">Prends une photo de la scène pour lancer la mesure.</div>';
+      return;
+    }
+    var r = solve(ev100);
+    var flags = r.flags.map(function (f) { return '<span class="chip ' + f[0] + '">' + f[1] + '</span>'; }).join("");
+    el.innerHTML =
+      '<div class="led-src">' + src + '<i>' + (srcInfo || "") + '</i></div>' +
+      '<div class="led-main"><div class="pair"><span>' + fmtN(r.N) + '</span><span>' + fmtT(r.t) + '</span></div>' +
+      '<div class="ev">IL 100<b>' + fmtEv(ev100) + '</b></div></div>' +
+      '<div class="flags">' + flags + '</div>' +
+      '<div class="s16">Sunny 16 : <b>' + sceneFor(ev100) + '</b> · ' + fmtN(r.s16.N) + ' à ' + fmtT(r.s16.t) + ' pour ISO ' + S.iso + '</div>';
+  }
+
+  /* ---------- EXIF (JPEG) ---------- */
+  function readExif(buf) {
+    try {
+      var v = new DataView(buf);
+      if (v.getUint16(0) !== 0xFFD8) return null;
+      var o = 2;
+      while (o < v.byteLength - 10) {
+        var m = v.getUint16(o);
+        if ((m & 0xFF00) !== 0xFF00) return null;
+        var len = v.getUint16(o + 2);
+        if (m === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) return parseTiff(v, o + 10);
+        if (m === 0xFFDA) return null;
+        o += 2 + len;
+      }
+    } catch (e) {}
+    return null;
+  }
+  function parseTiff(v, t) {
+    var le = v.getUint16(t) === 0x4949;
+    function u16(p) { return v.getUint16(p, le); }
+    function u32(p) { return v.getUint32(p, le); }
+    var SZ = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+    function ifd(off, into) {
+      var n = u16(t + off);
+      for (var i = 0; i < n; i++) {
+        var e = t + off + 2 + i * 12, tag = u16(e), type = u16(e + 2), cnt = u32(e + 4);
+        var vo = (SZ[type] || 1) * cnt > 4 ? t + u32(e + 8) : e + 8, val = null;
+        if (type === 3) val = u16(vo);
+        else if (type === 4) val = u32(vo);
+        else if (type === 5) { var d = u32(vo + 4); val = d ? u32(vo) / d : null; }
+        else if (type === 10) { var d2 = v.getInt32(vo + 4, le); val = d2 ? v.getInt32(vo, le) / d2 : null; }
+        else if (type === 2) { var s = ""; for (var j = 0; j < cnt - 1 && j < 64; j++) s += String.fromCharCode(v.getUint8(vo + j)); val = s.trim(); }
+        into[tag] = val;
+      }
+    }
+    var ifd0 = {}, ex = {};
+    ifd(u32(t + 4), ifd0);
+    if (ifd0[0x8769]) ifd(ifd0[0x8769], ex);
+    return {
+      model: ifd0[0x0110] || "", make: ifd0[0x010F] || "",
+      t: ex[0x829A], N: ex[0x829D], iso: ex[0x8827] || ex[0x8833],
+      f: ex[0x920A], f35: ex[0xA405]
+    };
+  }
+
+  /* ---------- Image analysis ---------- */
+  var LIN = new Float32Array(256);
+  for (var i = 0; i < 256; i++) { var c = i / 255; LIN[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+
+  function loadImage(file) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () { res(img); };
+      img.onerror = function () { rej(new Error("image")); };
+      img.src = url;
+    });
+  }
+  function buildLum(img) {
+    var max = 360, sc = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    var w = Math.max(1, Math.round(img.naturalWidth * sc)), h = Math.max(1, Math.round(img.naturalHeight * sc));
+    var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    var cx = cv.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, w, h);
+    var d = cx.getImageData(0, 0, w, h).data, lum = new Float32Array(w * h);
+    for (var p = 0, q = 0; q < lum.length; p += 4, q++) lum[q] = 0.2126 * LIN[d[p]] + 0.7152 * LIN[d[p + 1]] + 0.0722 * LIN[d[p + 2]];
+    M.lum = lum; M.w = w; M.h = h;
+  }
+  // Champ de la focale du film dans la photo (diagonale ∝ focale équivalente du téléphone / focale)
+  function frameRect() {
+    var w = M.w, h = M.h, frac = Math.min(1, M.phone35 / S.focal);
+    var a = w >= h ? 1.5 : 1 / 1.5;
+    var diag = frac * Math.sqrt(w * w + h * h);
+    var rw = diag * a / Math.sqrt(1 + a * a), rh = diag / Math.sqrt(1 + a * a);
+    var k = Math.min(1, w / rw, h / rh); rw *= k; rh *= k;
+    return { x: (w - rw) / 2, y: (h - rh) / 2, w: rw, h: rh, frac: frac };
+  }
+  function spotGeom(r) {
+    var rad = Math.max(2, Math.min(r.w, r.h) * 0.09);
+    var sx = Math.min(Math.max(M.spot.x * M.w, r.x + rad), r.x + r.w - rad);
+    var sy = Math.min(Math.max(M.spot.y * M.h, r.y + rad), r.y + r.h - rad);
+    return { x: sx, y: sy, r: rad };
+  }
+  function meter() {
+    if (!M.lum) return null;
+    var r = frameRect(), w = M.w, lum = M.lum, sum = 0, wsum = 0, clip = 0, cnt = 0;
+    var cx = r.x + r.w / 2, cy = r.y + r.h / 2, sig = Math.min(r.w, r.h) * 0.33, sp = spotGeom(r);
+    var x0 = Math.floor(r.x), x1 = Math.ceil(r.x + r.w), y0 = Math.floor(r.y), y1 = Math.ceil(r.y + r.h);
+    for (var y = y0; y < y1; y++) for (var x = x0; x < x1; x++) {
+      var wt = 1;
+      if (S.meter === "cw") { var dx = x - cx, dy = y - cy; wt = 0.25 + Math.exp(-(dx * dx + dy * dy) / (2 * sig * sig)); }
+      else if (S.meter === "spot") { var ddx = x - sp.x, ddy = y - sp.y; if (ddx * ddx + ddy * ddy > sp.r * sp.r) continue; }
+      var L = lum[y * w + x];
+      sum += wt * L; wsum += wt; cnt++;
+      if (L > 0.92) clip++;
+    }
+    if (!wsum) return null;
+    var mean = Math.max(sum / wsum, 1e-4);
+    return { mean: mean, clip: clip / cnt, rect: r, spot: sp };
+  }
+
+  /* ---------- Viewfinder drawing ---------- */
+  var fcv = $("finderCv");
+  function drawFinder(res) {
+    if (!M.img) return;
+    var box = $("finder").getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    var ar = M.w / M.h;
+    $("finder").style.aspectRatio = M.w + " / " + M.h;
+    var cw = Math.round(box.width), ch = Math.round(cw / ar);
+    fcv.width = cw * dpr; fcv.height = ch * dpr;
+    var g = fcv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.drawImage(M.img, 0, 0, cw, ch);
+    if (!res) return;
+    var s = cw / M.w, r = res.rect;
+    g.fillStyle = "rgba(10,9,7,0.55)";
+    g.beginPath(); g.rect(0, 0, cw, ch); g.rect(r.x * s, r.y * s + r.h * s, r.w * s, -r.h * s); g.fill("evenodd");
+    var accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#d0754d";
+    g.strokeStyle = accent; g.lineWidth = 2; g.strokeRect(r.x * s, r.y * s, r.w * s, r.h * s);
+    g.strokeStyle = "rgba(236,231,220,0.85)"; g.lineWidth = 1.5;
+    if (S.meter === "spot") {
+      g.beginPath(); g.arc(res.spot.x * s, res.spot.y * s, res.spot.r * s, 0, Math.PI * 2); g.stroke();
+    } else if (S.meter === "cw") {
+      g.beginPath(); g.arc((r.x + r.w / 2) * s, (r.y + r.h / 2) * s, Math.min(r.w, r.h) * 0.33 * s, 0, Math.PI * 2); g.stroke();
+    }
+  }
+
+  /* ---------- Measurement pipeline ---------- */
+  function computeMeasure() {
+    if (M.base == null) { M.ev = null; return; }
+    var res = meter();
+    if (res) {
+      // la zone mesurée, ramenée au gris moyen 18 %
+      M.ev = M.base + Math.log2(res.mean / 0.18) + S.calib;
+      M.clip = res.clip;
+    } else { M.ev = M.base + S.calib; M.clip = 0; }
+    drawFinder(res);
+  }
+  function hintText() {
+    var r = M.lum ? frameRect() : null, parts = [];
+    if (r) parts.push(r.frac >= 1 ? "focale ≤ " + M.phone35 + " mm : tout le champ du téléphone" : "cadre = champ du " + S.focal + " mm");
+    if (S.meter === "spot") parts.push("touche la photo pour placer le spot");
+    if (M.clip > 0.08) parts.push("hautes lumières brûlées : mesure sous-estimée");
+    return parts.join(" · ");
+  }
+
+  async function onFile(file) {
+    if (!file) return;
+    showMsg("");
+    try {
+      var buf = await file.arrayBuffer();
+      var ex = readExif(buf);
+      var img = await loadImage(file);
+      M.img = img; M.spot = { x: .5, y: .5 };
+      buildLum(img);
+      $("finderEmpty").hidden = true; fcv.hidden = false; $("finderHint").hidden = false;
+      if (ex && ex.t && ex.N && ex.iso) {
+        M.exif = ex;
+        M.phone35 = ex.f35 || (ex.f ? Math.round(ex.f * 7) : 26);
+        M.base = Math.log2(ex.N * ex.N / ex.t) - Math.log2(ex.iso / 100);
+        $("exifLine").hidden = false;
+        $("exifLine").innerHTML = (ex.model ? "<span><b>" + esc(ex.model) + "</b></span>" : "") +
+          "<span>f/<b>" + (Math.round(ex.N * 10) / 10) + "</b></span><span><b>" + fmtT(ex.t) + "</b></span><span>ISO <b>" + ex.iso + "</b></span>" +
+          "<span>≈ <b>" + M.phone35 + " mm</b> éq.</span>";
+      } else {
+        M.exif = null; M.base = null; M.phone35 = 26;
+        $("exifLine").hidden = true;
+        $("manualBox").open = true;
+        showMsg("Cette photo ne contient pas les réglages d'exposition (capture d'écran, HEIC converti ou photo retouchée). Reprends-la avec « Mesurer la scène », ou saisis les réglages du téléphone ci-dessous.");
+      }
+      update();
+    } catch (e) {
+      showMsg("Impossible de lire cette image. Essaie une photo JPEG prise avec l'appareil photo du téléphone.");
+    }
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function showMsg(t) { $("meterMsg").hidden = !t; $("meterMsg").textContent = t; }
+
+  $("cam").addEventListener("change", function (e) { onFile(e.target.files[0]); e.target.value = ""; });
+  $("gal").addEventListener("change", function (e) { onFile(e.target.files[0]); e.target.value = ""; });
+  $("mGo").addEventListener("click", function () {
+    var iso = parseFloat($("mIso").value), t = 1 / parseFloat($("mT").value), N = parseFloat($("mN").value);
+    if (!(iso > 0 && t > 0 && N > 0)) { showMsg("Renseigne l'ISO, la vitesse et l'ouverture du téléphone."); return; }
+    M.base = Math.log2(N * N / t) - Math.log2(iso / 100);
+    if (!M.exif) M.phone35 = 26;
+    showMsg("");
+    update();
+  });
+  fcv.addEventListener("click", function (e) {
+    if (S.meter !== "spot" || !M.lum) return;
+    var b = fcv.getBoundingClientRect();
+    M.spot = { x: (e.clientX - b.left) / b.width, y: (e.clientY - b.top) / b.height };
+    update();
+  });
+
+  /* ---------- Controls ---------- */
+  function bindSeg(id, key, after) {
+    var seg = $(id);
+    seg.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      S[key] = b.dataset.v; syncSeg(id, key); if (after) after(); update();
+    });
+  }
+  function syncSeg(id, key) {
+    [].forEach.call($(id).querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(b.dataset.v === S[key])); });
+  }
+  var METER_HELP = {
+    avg: "Moyenne : tout le cadre de la focale compte à parts égales.",
+    cw: "Pondérée centrale, comme la cellule d'un reflex : le centre du cadre compte davantage.",
+    spot: "Spot : un petit cercle, à placer d'un toucher sur le sujet (visage, gris moyen)."
+  };
+  var PRIO_HELP = {
+    auto: "Vitesse au moins égale à 1/focale pour éviter le bougé, diaphragme autour de f/8–f/11 quand la lumière le permet.",
+    A: "Tu fixes le diaphragme (profondeur de champ), la vitesse suit.",
+    S: "Tu fixes la vitesse (figer ou filer le mouvement), le diaphragme suit."
+  };
+
+  $("apSel").innerHTML = APS.map(function (a) { return "<option value='" + a + "'>" + fmtN(a) + "</option>"; }).join("");
+  $("spSel").innerHTML = SPEEDS.map(function (t) { return "<option value='" + t + "'>" + fmtT(t) + "</option>"; }).join("");
+  $("focalChips").innerHTML = FOCALS.map(function (f) { return "<button type='button' data-f='" + f + "'>" + f + "</button>"; }).join("");
+  $("scenes").innerHTML = SCENES.map(function (s) {
+    return "<button type='button' class='scene' data-ev='" + s.ev + "'><span class='f'>IL " + s.ev + "</span><span class='t'><b>" + s.name + "</b><span>" + s.shadow + "</span></span><span class='e'></span></button>";
+  }).join("");
+  $("s16tbl").innerHTML = [25, 50, 100, 200, 400, 800, 1600].map(function (iso) {
+    return "<tr><td>ISO " + iso + "</td><td>f/16 · " + fmtT(nearestLog(SPEEDS, 1 / iso)) + "</td></tr>";
+  }).join("");
+
+  bindSeg("segMeter", "meter", function () { $("meterHelp").textContent = METER_HELP[S.meter]; });
+  bindSeg("segPrio", "prio", syncPrio);
+  function syncPrio() {
+    $("prioHelp").textContent = PRIO_HELP[S.prio];
+    $("apField").hidden = S.prio !== "A"; $("spField").hidden = S.prio !== "S";
+  }
+  $("iso").addEventListener("change", function () { S.iso = +this.value; update(); });
+  $("nmax").addEventListener("change", function () { S.nmax = +this.value; update(); });
+  $("apSel").addEventListener("change", function () { S.ap = +this.value; update(); });
+  $("spSel").addEventListener("change", function () { S.sp = +this.value; update(); });
+  $("focal").addEventListener("input", function () { var f = +this.value; if (f >= 8 && f <= 1000) { S.focal = f; update(true); } });
+  $("focalChips").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return; S.focal = +b.dataset.f; $("focal").value = S.focal; update();
+  });
+  $("corr").addEventListener("input", function () { S.corr = +this.value; update(); });
+  $("calib").addEventListener("input", function () { S.calib = +this.value; update(); });
+  $("scenes").addEventListener("click", function (e) {
+    var b = e.target.closest(".scene"); if (!b) return; S.sunnyEv = +b.dataset.ev; update();
+  });
+
+  /* ---------- Tabs ---------- */
+  var tabs = document.querySelectorAll(".tabs button");
+  function showTab(id) {
+    [].forEach.call(tabs, function (b) {
+      var on = b.dataset.view === id; b.setAttribute("aria-selected", String(on)); $(b.dataset.view).hidden = !on;
+    });
+    $("main").scrollTop = 0;
+    if (id === "v-meter") requestAnimationFrame(function () { if (M.img) computeMeasure(); });
+    try { sessionStorage.setItem("posemetre16.tab", id); } catch (e) {}
+  }
+  [].forEach.call(tabs, function (b) { b.addEventListener("click", function () { showTab(b.dataset.view); }); });
+
+  /* ---------- Log ---------- */
+  $("saveBtn").addEventListener("click", function () {
+    if (M.ev == null) return;
+    var r = solve(M.ev);
+    LOG.unshift({ d: Date.now(), ev: Math.round(M.ev * 10) / 10, iso: S.iso, focal: S.focal, N: r.N, t: r.t, mode: S.meter, scene: sceneFor(M.ev) });
+    LOG = LOG.slice(0, 200); persistLog(); renderLog(); toast("Relevé enregistré");
+  });
+  var clearArmed = false;
+  $("clearBtn").addEventListener("click", function () {
+    if (!clearArmed) { clearArmed = true; this.textContent = "Confirmer l'effacement"; var b = this; setTimeout(function () { clearArmed = false; b.textContent = "Tout effacer"; }, 3500); return; }
+    LOG = []; persistLog(); clearArmed = false; this.textContent = "Tout effacer"; renderLog(); toast("Relevés effacés");
+  });
+  var MODE_LBL = { avg: "moyenne", cw: "pondérée", spot: "spot" };
+  function renderLog() {
+    $("logCount").textContent = LOG.length + (LOG.length > 1 ? " relevés" : " relevé");
+    $("clearBtn").hidden = !LOG.length;
+    if (!LOG.length) {
+      $("logList").innerHTML = "<li class='empty-log' style='display:block'>Aucun relevé pour l'instant. Mesure une scène puis touche « Enregistrer le relevé » : le couple ouverture / vitesse, la focale et le film seront notés ici.</li>";
+      return;
+    }
+    $("logList").innerHTML = LOG.map(function (x) {
+      var d = new Date(x.d);
+      var when = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }) + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      return "<li><span class='res'>" + fmtN(x.N) + " · " + fmtT(x.t) + "</span><span class='when'>" + when + "</span>" +
+        "<span class='meta'>IL " + fmtEv(x.ev) + " · " + esc(x.scene) + " · ISO " + x.iso + " · " + x.focal + " mm · " + (MODE_LBL[x.mode] || "") + "</span></li>";
+    }).join("");
+  }
+  var tt;
+  function toast(t) { var el = $("toast"); el.textContent = t; el.hidden = false; clearTimeout(tt); tt = setTimeout(function () { el.hidden = true; }, 1800); }
+
+  /* ---------- Render ---------- */
+  function update(skipFocalInput) {
+    persist();
+    $("filmTag").textContent = "ISO " + S.iso + " · " + S.focal + " mm";
+    $("corrOut").textContent = (S.corr > 0 ? "+" : "") + S.corr + " IL";
+    $("calibOut").textContent = (S.calib > 0 ? "+" : "") + S.calib.toFixed(1) + " IL";
+    [].forEach.call($("focalChips").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", String(+b.dataset.f === S.focal)); });
+    $("focalHelp").textContent = "Main levée : pas plus lent que " + fmtT(nearestLog(SPEEDS, 1 / S.focal)) + ". Le cadre mesuré dans la photo correspond à l'angle de champ du " + S.focal + " mm.";
+    [].forEach.call($("scenes").querySelectorAll(".scene"), function (b) {
+      var ev = +b.dataset.ev, r = solve(ev);
+      b.setAttribute("aria-pressed", String(ev === S.sunnyEv));
+      b.querySelector(".e").textContent = fmtN(r.N) + " " + fmtT(r.t);
+    });
+
+    computeMeasure();
+    $("finderHint").textContent = hintText();
+    var info = M.exif ? (M.exif.model || "photo") : (M.base != null ? "saisie manuelle" : "en attente");
+    renderLed($("ledMeter"), M.ev, "Mesure " + MODE_LBL[S.meter], info);
+    $("saveBtn").hidden = M.ev == null;
+    var sc = SCENES.filter(function (s) { return s.ev === S.sunnyEv; })[0];
+    renderLed($("ledSunny"), S.sunnyEv, "Estimation Sunny 16", sc ? sc.name : "");
+  }
+
+  // initial sync
+  $("iso").value = String(S.iso); if ($("iso").value !== String(S.iso)) { S.iso = 100; $("iso").value = "100"; }
+  $("nmax").value = String(S.nmax);
+  $("focal").value = S.focal;
+  $("apSel").value = String(S.ap); $("spSel").value = String(S.sp);
+  $("corr").value = S.corr; $("calib").value = S.calib;
+  syncSeg("segMeter", "meter"); syncSeg("segPrio", "prio"); syncPrio();
+  $("meterHelp").textContent = METER_HELP[S.meter];
+  renderLog();
+  update();
+  try { var tab = sessionStorage.getItem("posemetre16.tab"); if (tab && $(tab)) showTab(tab); } catch (e) {}
+  window.addEventListener("resize", function () { if (M.img) computeMeasure(); });
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+</script>
+</body>
+</html>
